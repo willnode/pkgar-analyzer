@@ -1,0 +1,13 @@
+body { font-family: sans-serif; padding: 20px; }
+    #dropZone {
+      padding: 40px;
+      border: 3px dashed #888;
+      text-align: center;
+      color: #888;
+      margin-bottom: 20px;
+    }
+    pre {
+      background: #eee;
+      padding: 10px;
+      overflow-x: auto;
+    }
