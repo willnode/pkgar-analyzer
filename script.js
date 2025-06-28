@@ -19,7 +19,11 @@ dropZone.addEventListener('drop', e => {
 });
 
 async function downloadFileWithProgress(url) {
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: {
+      Range: 'bytes=0-102399' // 100 KB = 102400 bytes
+    }
+  });
   if (!response.ok) throw new Error(`HTTP error ${response.status}`);
 
   const contentLength = response.headers.get('Content-Length');
@@ -122,9 +126,11 @@ window.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const path = urlParams.get('path');
   if (path) {
-    const targetUrl = path.startsWith('http') ? path : `https://static.redox-os.org/pkg/${path}`;
+    const targetUrl = path.startsWith('http') ? path : `https://wellosoft.github.io/redox-os-builder/${path}`;
+    output.textContent = 'Downloading ' + targetUrl;
     downloadFileWithProgress(targetUrl).catch(err => {
-      console.error('Download failed:', err);
+      console.error(err);
+      output.textContent = 'Download failed: ' + err.toString();
     });
   }
 });
