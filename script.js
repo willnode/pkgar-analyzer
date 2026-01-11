@@ -15,13 +15,13 @@ dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.style.borderColor = '#888';
   const file = e.dataTransfer.files[0];
-  file && file.arrayBuffer().then(x => analyzeFile(x));
+  file && file.arrayBuffer().then(x => analyzeFile(x, file.name));
 });
 
 async function downloadFileWithProgress(url) {
   const response = await fetch(url, {
     headers: {
-      Range: 'bytes=0-102399' // 100 KB = 102400 bytes
+      Range: 'bytes=0-204799' // 200 KB = 204800 bytes
     }
   });
   if (!response.ok) throw new Error(`HTTP error ${response.status}`);
@@ -46,30 +46,38 @@ async function downloadFileWithProgress(url) {
 
   const blob = new Blob(chunks);
   const arrayBuffer = await blob.arrayBuffer();
-  analyzeFile(arrayBuffer);
+  analyzeFile(arrayBuffer, url);
 }
 
 
-function analyzeFile(arrayBuffer) {
+/** @param {ArrayBuffer} arrayBuffer */
+function analyzeFile(arrayBuffer, name) {
   const dataView = new DataView(arrayBuffer);
 
   const header = {
     signature: new Uint8Array(arrayBuffer, 0, 64),
     publicKey: new Uint8Array(arrayBuffer, 64, 32),
     headerBlake3: new Uint8Array(arrayBuffer, 96, 32),
-    count: dataView.getBigUint64(128, true)
+    count: dataView.getUint32(128, true),
+    flags: dataView.getUint32(132, true),
   };
 
-  let outputText = `== HEADER ==\n`;
+  let outputText = `FILE: ${name}\n\n== HEADER ==\n`;
   outputText += `Signature: ${[...header.signature].map(b => b.toString(16).padStart(2, '0')).join('')}\n`;
   outputText += `Public Key: ${[...header.publicKey].map(b => b.toString(16).padStart(2, '0')).join('')}\n`;
   outputText += `Header blake3: ${[...header.headerBlake3].map(b => b.toString(16).padStart(2, '0')).join('')}\n`;
+  outputText += `Data flags: ${header.flags.toString(2)}\n`;
   outputText += `Entry count: ${header.count}\n\n`;
 
-  const entryBaseOffset = 136n;
-  const entrySize = 308n;
+  const entryBaseOffset = 136;
+  const entrySize = 308;
 
-  for (let i = 0n; i < header.count; i++) {
+  const headerSize =  entrySize * header.count + entryBaseOffset;
+  if (arrayBuffer.byteLength < headerSize) {
+     output.textContent = `The package file must be atleast ${headerSize} bytes`;
+  }
+
+  for (let i = 0; i < header.count; i++) {
     const base = Number(entryBaseOffset + i * entrySize);
     const entryBlake3 = new Uint8Array(arrayBuffer, base, 32);
     const offset = new DataView(arrayBuffer, base + 32, 8).getBigUint64(0, true);
@@ -79,7 +87,7 @@ function analyzeFile(arrayBuffer) {
     const pathBytes = new Uint8Array(arrayBuffer, base + 52, 256);
     const path = new TextDecoder().decode(pathBytes).replace(/\0.*$/, '');
 
-    outputText += `== ENTRY ${i + 1n} ==\n`;
+    outputText += `== ENTRY ${i + 1} ==\n`;
     outputText += `File blake3: ${[...entryBlake3].map(b => b.toString(16).padStart(2, '0')).join('')}\n`;
     outputText += `Offset: ${offset} bytes, Size: ${size} bytes\n`;
     outputText += `Mode: ${modeParsed.permOctal} (${modeParsed.permSymbolic}), Type: ${modeParsed.kind}\n`;
@@ -126,7 +134,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const urlParams = new URLSearchParams(window.location.search);
   const path = urlParams.get('path');
   if (path) {
-    const targetUrl = path.startsWith('http') ? path : `https://wellosoft.github.io/redox-os-builder/${path}`;
+    const targetUrl = path.startsWith('http') ? path : new URL(path, window.location.toString());
     output.textContent = 'Downloading ' + targetUrl;
     downloadFileWithProgress(targetUrl).catch(err => {
       console.error(err);
